@@ -1,0 +1,6 @@
+0.0-0
+Initial release, covering:
+- utilities for CRP, including best CRP
+- Cover's universal portfolio
+- Non stationary tracking, SCRP and WSCRP of Gaivoronski and Stella
+

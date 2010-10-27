@@ -1,0 +1,15 @@
+# NAMESPACE file for logopt
+export(w2x,
+       crp,
+       bh,
+       oracle,
+       best.stock,
+       worst.stock,
+       best.envelope,
+       worst.envelope,
+       bcrp.optim,
+       universal.cover,
+       wscrp,
+       scrp
+       )
+       

@@ -1,0 +1,13 @@
+Package: logopt
+Type: Package
+Title: Log optimal (universal) portfolios
+Version: 0.0-0
+Date: 2010-10-23
+Author: Marc Delvaux
+Depends: quadprog, xts
+Suggests: quantmod
+Maintainer: Marc Delvaux <mdelvaux@gmail.com>
+Description: Implement universal portfolio strategies targeting log-optimal growth
+LazyLoad: yes
+License: GPL-3
+URL: http://r-forge.r-project.org/projects/logopt
