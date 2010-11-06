@@ -6,25 +6,28 @@
   next period.
 }
 \usage{
-scrp(x, k0 = 1, k = 1, fast.only = TRUE)
+scrp(x, start = 1, by = 1, fast.only = TRUE)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
   \item{x}{
     Time series of relative prices
 }
-  \item{k0}{
+  \item{start}{
     Start time 
 }
-  \item{k}{
+  \item{by}{
     Step in time to recalculate best CRP
 }
   \item{fast.only}{
-  Only use the fast but slightly inaccurate version of CRP optimization
+  Only use the fast but slightly inaccurate version of CRP optimization.
 }
 }
 \details{
-  TBD
+  At each time index ti = start + i * by, calculate the weights for the best CRP up to
+  but not including ti, and uses that as portfolio until the next
+  optimization point.  Return the time series of the corresponding
+  portfolio wealth.
 }
 \value{
   Return the time series of portfolio wealths.

@@ -1,25 +1,24 @@
 \name{wscrp}
 \alias{wscrp}
-%- Also NEED an '\alias' for EACH other topic documented here.
 \title{ Weighted Successive Constant Rebalanced Portfolio }
 \description{
   Calculate current portfolio weights as a weighted average of the best
   CRP until now and the previous weights
 }
 \usage{
-wscrp(x, k0 = 1, k = 1, a = 0.99, fast.only = TRUE)
+wscrp(x, start = 1, by = 1, alpha = 0.99, fast.only = TRUE)
 }
 \arguments{
   \item{x}{
     Time series of relative prices
 }
-\item{k0}{
+\item{start}{
     Start time 
 }
-  \item{k}{
+  \item{by}{
     Step in time to recalculate best CRP
 }
-  \item{a}{
+  \item{alpha}{
     The weight between old and new
 }
 \item{fast.only}{
@@ -27,7 +26,11 @@ wscrp(x, k0 = 1, k = 1, a = 0.99, fast.only = TRUE)
 }
 }
 \details{
-  TBD
+  At each time index ti = start + i * by, calculate the weights for the best CRP up to
+  but not including ti, call that crp_i, calculate the weigthed sum of
+  (1-alpha) * crp_i + alpha * w_i-1 = w_i, use w_i as weights the that as portfolio until the next
+  optimization point.  Return the time series of the corresponding
+  portfolio wealth.  w_0 is the uniform weight vector.
 }
 \value{
   Return the time series of portfolio wealths.

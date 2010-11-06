@@ -84,12 +84,12 @@ oracle <- function (x) { # non causal maximum gain
   	return(xts(cumprod(xp), order.by=index(x)))
 }
 
-best.stock <- function (x) {
+best.asset <- function (x) {
   	xm <- x[,which.max(cumprod(x)[dim(x)[1]])]
   	return(xts(cumprod(xm), order.by=index(x)))
 }
 
-worst.stock <- function (x) {
+worst.asset <- function (x) {
   	xm <- x[,which.min(cumprod(x)[dim(x)[1]])]
   	return(xts(cumprod(xm), order.by=index(x)))
 }
@@ -278,27 +278,27 @@ wscrp2 <- function (x, start=1, step=1, a=0.99, fast.only=TRUE) {
 	return(crp(b,x))
 }
 
-wscrp <- function (x, k0=1, k=1, a=0.99, fast.only=TRUE) {
+wscrp <- function (x, start=1, by=1, alpha=0.99, fast.only=TRUE) {
 	# exponential moving average on scrp
       m <- dim(x)[2]
       n <- dim(x)[1]
-	b <- 0 * x
-	b[1:k0,] <- 1/m
-      i <- k0+1
+      b <- 0 * x
+      b[1:start,] <- 1/m
+      i <- start+1
       b0 <-  bcrp.optim(x[1:(i-1)], fast.only=fast.only)
-	while(i < n) {
-		b0 <- bcrp.optim(x[1:(i-1)], fast.only=fast.only) * (1-a) + b0 * a
-		b0[is.nan(b0)] <- 1/m
-		j <- min(n,i+k)
-		bt <- array(rep(b0,j-i+1),dim=c(m,j-i+1))
-		b[i:j,] <- t(bt)
-		i <- j
-	}
-	return(crp(b,x))
+      while(i < n) {
+        b0 <- bcrp.optim(x[1:(i-1)], fast.only=fast.only) * (1-alpha) + b0 * alpha
+        b0[is.nan(b0)] <- 1/m
+        j <- min(n,i+by)
+        bt <- array(rep(b0,j-i+1),dim=c(m,j-i+1))
+        b[i:j,] <- t(bt)
+        i <- j
+      }
+      return(crp(b,x))
 }
 
-scrp <- function (x, k0=1, k=1, fast.only=TRUE) { 
-	return(wscrp(x, k0=k0, k=k, a=0, fast.only=fast.only)) 
+scrp <- function (x, start=1, by=1, fast.only=TRUE) { 
+	return(wscrp(x, start=start, by=by, alpha=0, fast.only=fast.only)) 
 }
 
 

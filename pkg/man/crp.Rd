@@ -1,16 +1,12 @@
 \name{crp}
 \alias{crp}
-\alias{bh}
-\title{ Constant Balanced portfolio or Buy and Hold portfolio }
+\title{Constant Rebalanced portfolio}
 \description{
-  Calculate the time evolution of either a Constant Rebalanced Portfolio
-  or a Buy and Hold portfolio given the prices relative and weights.
+  Calculate the time evolution of a Constant Rebalanced Portfolio wealth
+  given the prices relative and weights.
 }
 \usage{
 crp(b = NULL, x)
-}
-\usage{
-bh(b = NULL, x)
 }
 \arguments{
   \item{b}{
@@ -23,7 +19,9 @@ bh(b = NULL, x)
 }
 }
 \details{
-  TBD
+  Calculate the relative wealth increase of the portfolio as the weigthed sum
+  of the price relatives of the individual set, then calculate the time
+  series of the portfolio wealth as the cumprod.
 }
 \value{
     Time series of the wealth for the portfolio.

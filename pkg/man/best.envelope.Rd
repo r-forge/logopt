@@ -1,16 +1,12 @@
 \name{best.envelope}
 \alias{best.envelope}
-\alias{worst.envelope}
-\title{ Best or worst stock at any moment in time }
+\title{ Best price at any moment in time }
 \description{
-  Calculate the time evolution of all stocks based on the given prices
-  relative and take the maximum or minimum at every time index.
+  Calculate the time evolution of all assets based on the given prices
+  relative and take the maximum at every time index.
 }
 \usage{
 best.envelope(x)
-}
-\usage{
-worst.envelope(x)
 }
 \arguments{
   \item{x}{
@@ -18,10 +14,13 @@ worst.envelope(x)
 }
 }
 \details{
-  Contrast to best.stock or worst.stock that shows the time evolution
-  for the stock with the best or worst terminal wealth respectively.
+  Perform a cumprod per column to recover the time series of each asset
+  price, construct and return a time series with the best price at any
+  time index.  Contrast to best.asset that shows
+  the time evolution
+  for the individual asset with the best terminal price.
 }
 \value{
-  Time series of the best or worst wealth at any time index.
+  Time series of the best asset price any time index.
 }
 \author{ Marc Delvaux }
