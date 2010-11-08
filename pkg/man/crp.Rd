@@ -26,4 +26,10 @@ crp(b = NULL, x)
 \value{
     Time series of the wealth for the portfolio.
 }
+\examples{
+require(logopt)
+data(nyse.cover.1962.1984)
+w <- crp(NULL, nyse.cover.1962.1984)
+plot(w)
+}  
 \author{ Marc Delvaux }

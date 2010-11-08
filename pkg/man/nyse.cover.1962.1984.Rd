@@ -1,14 +1,14 @@
-\name{nyse.gyorfi.1962.2006}
+\name{nyse.cover.1962.1984}
 \docType{data}
-\alias{nyse.gyorfi.1962.2006}
-\title{Some NYSE stocks as used by Gyorfi}
+\alias{nyse.cover.1962.1984}
+\title{Some NYSE stocks as used by Cover}
 \description{
-This data set is a xts time series of close to close ratios for some subset of NYSE stocks, extending in time the period used by Cover.
-Some stocks have been dropped because they don't cover the full period, illustrating the danger of survivorship bias.
+This data set is a xts time series of close to close ratios for some subset of NYSE stocks as originally used by Cover.
+The same series was used as reference by some other articles.
 }
-\usage{nyse.gyorfi.1962.2006}
+\usage{nyse.cover.1962.1984}
 \format{A xts time series, column names identify the stocks, plus Cash and Bond.}
-\source{Available online at http://www.szit.bme.hu/~oti/portfolio/data.html}
+\source{Available online at http://www.szit.bme.hu/~oti/portfolio/data.html }
 \references{
 Cover, Universal Portfolios
 }

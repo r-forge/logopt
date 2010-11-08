@@ -5,35 +5,6 @@
 require(xts)
 require(quadprog)
 
-# help routine to read one of the raw csv file, either from
-# the original cover dataset or the merged sequence
-
-read.nyse.dataset <- function (name, original = FALSE) {
-	filename <- paste("../data/", ifelse(original, "NyseOld/", "NyseMerged/"), name, ".csv", sep="")
-	x <- try(read.csv(filename,header=FALSE))
-	# modify first column to have the full 4 digits year
-	after2000 <- x[,1] < 500000
-	x[,1] <- x[,1] + 19000000
-	x[after2000,1] <- x[after2000,1] + 1000000
-	x <- xts(x[,2], order.by=as.Date(paste(x[,1]), format="%Y%m%d"))
-}
-
-read.all.nyse.dataset <- function (original = FALSE) {
-	names <- dir(paste("../data/", ifelse(original, "NyseOld/", "NyseMerged/"), sep=""), pattern=".*csv$")
-	tickers <- list()	
-	for (i in 1:length(names)) {
-		name <- names[[i]]
-		if (substr(name,1,1) == "N") next  # eliminate the csv file containing the list of ticker
-		ticker <- substr(name,1,nchar(name)-4)
-		tickers[[1+length(tickers)]] <- ticker 
-		x <- read.nyse.dataset(ticker, original)
-		if(length(tickers) == 1) { xs <- x }
-		else { xs <- merge(xs, x) }
-	}
-	colnames(xs) <- tickers
-	return(xs)
-}
-
 is.compatible <- function (b, x) {
 	# b is either a vector or a matrix
 	# x is n (timesteps) * m (assets)
@@ -116,28 +87,6 @@ crp.1d <- function (x, from = 0, to = 1, n = 11) {
   return(w.1d)
 }
 
-demo.cover.ik <- function (x.ik = NULL, i.win = 2) { 
-	# x.ik is supposed to be a xts containing iroquois and kinark, if NULL we read them
-	# i.win is the index of the first window to use
-	if (is.null(x.ik)) {
-	      kinar <- read.nyse.dataset("kinar", original = TRUE)
-		iroqu <- read.nyse.dataset("iroqu", original = TRUE)
-		x.ik <- merge(kinar, iroqu)
-  	}
-      if (is.null(dev.list())) { x11() } ;
-	while(length(dev.list()) < (i.win-1)) { x11() } ;
-	dev.set(i.win); i.win <- i.win + 1;
-	plot(index(x.ik), cumprod(x.ik[,1]), type="l", col="blue")
-	lines(index(x.ik), cumprod(x.ik[,2]), col="red")
-	grid() ;
-	w <- crp.1d(x.ik, from=0, to=1, n=21) 
-	while(length(dev.list()) < (i.win-1)) { x11() } ;
-	dev.set(i.win); i.win <- i.win + 1;
-	plot(w,type="l",col="blue")
-	points(w, col="red", pch=19,cex=0.75)
-	abline(h=sum(w)/length(w), col="green")
-	grid()
-}
 
 round.to.zero <- function (b, do.round, eps) {
 	if (do.round) {
@@ -210,17 +159,12 @@ next.simplex.point <- function (a) {
 	}
 }
 
-count.points <- function (n, m) {
+count.grid.points <- function (n, m) {
 	# n urns and m balls
-	a <- 0 * 1:n
-	a[1] <- m
-	npoints <- 0 
-	repeat {
-		a <- next.simplex.point(a) 
-		npoints <- npoints + 1
-		if (is.null(a)) { break }
-	}
-	return (npoints)
+	pts <- 1
+	if (n < 2) { return(1) }
+  	for (i in 1:(n-1)) { pts <- pts * (m+i) / i }
+	return(pts)
 }
 
 universal.cover <- function (x, n) { # should also return a vector of combined b
@@ -229,7 +173,7 @@ universal.cover <- function (x, n) { # should also return a vector of combined b
 	b[1] <- n
 	npts <- 0
 	w <- 0 * x[,1]
-	colnames[w] <- c("universal.cover")
+	colnames(w) <- c("universal.cover")
 	repeat {
 		w <- w + crp(b,x)
 		npts <- npts + 1
@@ -238,6 +182,44 @@ universal.cover <- function (x, n) { # should also return a vector of combined b
 			return(w/npts)
 		}
 	}
+}
+
+# Ishijima methods for uniform and Dirichlet sampling of the simplex
+# uniform used the direct method (with sort), not the sequential method with exponent (could be done in fact)
+uniform.simplex.sampling <- function (n,m) {
+  # n is the number of samples
+  # m is the number of dimensions
+  x <- array(runif((m-1) * n), dim=c(n,(m-1)))  # prepare for the operation of apply
+  if (m > 2) {
+    x <- t(apply(x,1,sort))
+    y <- apply(x,1,diff)
+    if (m>3) { y <- t(y) }
+    b <- cbind(x[,1], y, x[,m-1]) 
+    return(b)
+  }
+  return (cbind(x, 1-x))
+}
+
+dirichlet.simplex.sampling <- function (n, m, alpha=0.5) {
+  # n is the number of samples
+  # m is the number of dimensions
+  # alpha is the parameter for the gamma
+  x <- matrix(rgamma(m * n, alpha), ncol = m, byrow = TRUE)
+  sm <- x %*% rep(1, m)
+  x/as.vector(sm)
+}
+
+universal.cover.random <- function (x, n, method) { # should also return a vector of combined b
+	# method is "uniform" or "dirichlet"
+	# generation of points in simplex with correct density is based on Ishijima article
+	# implementation for dirichlet is however taken from rdirichlet in package 
+	m <- dim(x)[2]
+	w <- 0 * x[,1]
+	colnames(w) <- c("universal.cover")
+	if (method == "uniform") { bs <- uniform.simplex.sampling(n,m) }
+	if (method == "dirichlet") { bs <- dirichlet.simplex.sampling(n,m) }
+	for (i in 1:n) { w <- w + crp(bs[i,],x) }
+	return (w/n)
 }
 
 roll.bcrp <- function (x, start=1, step=1, window=NULL, fast.only=TRUE) {
