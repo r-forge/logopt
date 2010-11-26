@@ -4,7 +4,7 @@
 \description{
   Implement the universal portfolio selection algortihm defined by Cover
   directly, i.e. with exponential complexity in the number of stocks
-  considered.  At this time, only use the uniform measure.
+  considered.
 }
 \usage{
 universal.cover(x, n)

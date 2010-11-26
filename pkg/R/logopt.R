@@ -10,7 +10,7 @@ is.compatible <- function (b, x) {
 	# x is n (timesteps) * m (assets)
 	# we need b = 1 * m or m * 1 or n * m
 	if(is.vector(b)) { return(dim(x)[2] == length(b)) }
-      if(is.array(b)) { return(all(dim(b) == dim(x))) }
+        if(is.array(b)) { return(all(dim(b) == dim(x))) }
 	return(FALSE)
 }
 
@@ -128,12 +128,12 @@ bcrp.optim <- function (x, maxit=20, clean.up = TRUE, clean.up.eps = 1e-10, fast
   	if (inherits(b0,"try-error")) {
 		# if we cannot find the best one
 		b0 <- rep(0,dim(x)[2])
-      	# identify best stock and use that as start point
-      	b0[which.max(apply(x,2,prod))] <- 1
+                # identify best stock and use that as start point
+                b0[which.max(apply(x,2,prod))] <- 1
 		fast.only = FALSE
   	}
 	if (!fast.only) {
-	  	solution <- optim(b0, CRPoptrescale, gr=NULL, method="BFGS", lower=-Inf, upper=Inf,control = list(maxit=maxit), hessian=FALSE, x)
+	  	solution <- optim(log(b0+clean.up.eps), CRPoptrescale, gr=NULL, method="BFGS", lower=-Inf, upper=Inf,control = list(maxit=maxit), hessian=FALSE, x)
   		b0 <- exp(solution$par)
 	}
 	return(round.to.zero(b0/sum(b0), clean.up, clean.up.eps))
@@ -220,6 +220,67 @@ universal.cover.random <- function (x, n, method) { # should also return a vecto
 	if (method == "dirichlet") { bs <- dirichlet.simplex.sampling(n,m) }
 	for (i in 1:n) { w <- w + crp(bs[i,],x) }
 	return (w/n)
+}
+
+mult.upgrade <- function (x, eta, method) { # Multiplicative updates, unable to get reported results
+  # method currently supported are "EG" and "chi2"
+  # "exact" is more or less planed, but with low priority
+  # simple but recursive so needs an explicit loop
+  b <- 0 * x
+  b[1,] <- 1/dim(x)[2]
+  if (method == "EG") {
+    for (t in 2:dim(x)[1]) {
+      b[t,] <- b[t-1,] * exp(eta * x[t-1,] / (b[t-1,] %*% x[t-1,]))
+      b[t,] <- b[t,] / sum(b[t,])
+    }
+    return(b)
+  }
+  if (method == "chi2") {
+    for (t in 2:dim(x)[1]) {
+      b[t,] <- b[t-1,] * ( eta * (x[t-1,] / (b[t-1,] %*% x[t-1,]) - 1) + 1) 
+      b[t,] <- b[t,] / sum(b[t,])
+    }
+    return(b)
+  }
+  if (method == "exact") {
+    print("Method ""exact"" is not currently supported in function mult.upgrade")
+    return(NULL)
+  }
+  return(NULL)
+}
+
+switching.portfolio <- function(x, gamma, method) { # Singer switching portfolio approach
+  # method is "fixed" or "adaptive"
+  # w[t,i] store the value of asset i after application of x[t,i]
+  w <- array(0, dim=dim(x))
+  nAssets <- dim(x)[2]
+  w[1,] <- 1/nAssets * x[1,]
+  if (method == "fixed") {
+    for (t in 2:dim(x)[1]) {
+        w[t,] <- ((1 - gamma - gamma / (nAssets-1)) *
+                  w[t-1,] + 
+                  (gamma / (nAssets-1)) * sum(w[t-1,])) * x[t,]
+    }
+    return(apply(w,1,sum))
+  }
+  if (method == "adaptive") {
+    # wtt0[t0,i] store the value of the pure strategy starting at t0 before redistribution
+    # ghdt stands for gamma hat delta t
+    wtt0 <- w
+    for (t in 2:dim(x)[1]) {
+      past.index <- 1:(t-1)
+      ghdt <- 0.5 / (1 + seq(t-1, 1, by = -1))
+      out <- wtt0[past.index,] * ghdt # rely on recycling
+      if (t == 2) { out.by.asset <- out/(nAssets-1) }
+      else        { out.by.asset <- apply(out,2,sum) / (nAssets-1) }
+      wtt0[t,] <- -out.by.asset + sum(out.by.asset)
+      wtt0[past.index,] <- wtt0[past.index,] - out
+      wtt0[1:t,] <- wtt0[1:t,] * rep(x[t,], each=t)
+      w[t,] <- apply(wtt0[1:t,],2,sum)
+    }
+    return(apply(w,1,sum))
+  }
+  return(NULL)
 }
 
 roll.bcrp <- function (x, start=1, step=1, window=NULL, fast.only=TRUE) {

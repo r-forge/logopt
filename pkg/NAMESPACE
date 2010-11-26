@@ -10,6 +10,8 @@ export(w2x,
        bcrp.optim,
        universal.cover,
        wscrp,
-       scrp
+       scrp,
+       mult.upgrade,
+       switching.portfolio
        )
        
