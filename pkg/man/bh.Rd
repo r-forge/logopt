@@ -5,15 +5,12 @@
   Calculate the time evolution of a Buy and Hold portfolio wealth given the prices relative and weights.
 }
 \usage{
-bh(b = NULL, x)
+bh(x, b = NULL)
 }
 \arguments{
-  \item{b}{
-    The portfolio weights with two variants: NULL or a vector.
-    Null will be transformed as the uniform vector.
-}
-\item{x}{
-          Time series of relative prices
+\item{x}{ Time series of relative prices }
+\item{b}{ The portfolio weights with two variants: NULL or a vector.
+NULL will be transformed as the uniform vector.
 }
 }
 \details{

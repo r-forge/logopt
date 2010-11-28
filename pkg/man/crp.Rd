@@ -6,16 +6,13 @@
   given the prices relative and weights.
 }
 \usage{
-crp(b = NULL, x)
+crp(x, b = NULL)
 }
 \arguments{
-  \item{b}{
-    The portfolio weights with three variants: NULL, vector and time
-    series of vectors.
-    Null will be transformed as the uniform vector.
-}
-\item{x}{
-          Time series of relative prices
+\item{x}{ Time series of relative prices }
+\item{b}{ The portfolio weights with three variants: NULL, vector and time
+series of vectors.
+NULL will be transformed as the uniform vector.
 }
 }
 \details{
@@ -29,7 +26,7 @@ crp(b = NULL, x)
 \examples{
 require(logopt)
 data(nyse.cover.1962.1984)
-w <- crp(NULL, nyse.cover.1962.1984)
-plot(w)
+w <- crp(nyse.cover.1962.1984)
+plot(w, type="l", col="blue")
 }  
 \author{ Marc Delvaux }

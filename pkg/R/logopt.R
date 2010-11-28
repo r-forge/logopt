@@ -5,190 +5,211 @@
 require(xts)
 require(quadprog)
 
+# check for compatible dimensions
+# b is either a vector or a matrix of weights
+# x is n (timesteps) * m (assets)
+# we need b = 1 * m or m * 1 or n * m
 is.compatible <- function (b, x) {
-	# b is either a vector or a matrix
-	# x is n (timesteps) * m (assets)
-	# we need b = 1 * m or m * 1 or n * m
-	if(is.vector(b)) { return(dim(x)[2] == length(b)) }
-        if(is.array(b)) { return(all(dim(b) == dim(x))) }
-	return(FALSE)
+  if(is.vector(b)) { return(dim(x)[2] == length(b)) }
+  if(is.array(b)) { return(all(dim(b) == dim(x))) }
+  return(FALSE)
 }
 
+# sum of weights must be 1 per line
 normalize <- function (b) {
-	if (is.vector(b)) { return (b/sum(b)) }
-	else              { return (b/apply(b,1,sum)) }
+  if (is.vector(b)) { return (b/sum(b)) }
+  if (is.array(b)) { return (b/apply(b,1,sum)) }
+  return(NULL)
 }
 
-w2x <- function (w) {  # this works for xts because of how lag.xts operates
-  	x <- w/lag(w)
-  	x[1,] <- w[1,]
-  	return(x)
+# take a wealth/price sequence and calculate the wealth/price relative
+w2x <- function (w) {
+  if (is.xts(w)) {
+    x <- w / lag(w)
+    x[1,] <- w[1,]
+    return(x)
+  }
+  x <- w
+  if (is.vector(w)) {
+    n <- length(w)
+    x[2:n] <- w[2:n] / w[1:(n-1)]
+    return(x)
+  }
+  if (is.array(w)) {
+    n <- dim(w)[1]
+    x[2:n,] <- w[2:n,] / w[1:(n-1),]
+    return(x)
+  }
+  return(NULL)
+}
+
+# take a price/wealth relative relative and calculate the price/wealth
+x2w <- function (x) {
+  if (is.xts(x)) { return(cumprod(x)) }
+  if (is.array(x)) { return(apply(x,2,cumprod)) }
+  if (is.vector(x)) { return(cumprod(x)) }
+  return(NULL)
 }
 
 # crp and bh are very close, so we implement them as the same procedure
-crp_bh <- function (b = NULL, x, bh = FALSE) {
-	# bh works on w, crp on x, but otherwise they are similar
-  	# - b can be either a vector (constant) or a matrix (weight at each instant in time)
-  	#   if b is NULL, we use an uniform vector loading, simple reference
-  	# - x is a matrix of price relative, normally an xts
-	if (is.null(b)) { b <- rep(1/dim(x)[2],dim(x)[2]) }
-  	if(!is.compatible(b,x)) { stop("b and x not compatible in crp(b,x)", Call.=TRUE) } 
-  	b <- normalize(b)
-	if (bh) { x <- cumprod(x) }
-  	if (is.vector(b)) { xp <- x %*% b }
-  	else              { xp <- apply(b*x, 1, sum) }
-	if (bh) { return (xts(xp, order.by=index(x))) }
-	else    { return (xts(cumprod(xp), order.by=index(x)))}
+# bh works on w, crp on x, but otherwise they are similar
+# - b can be either a vector (constant) or a matrix (weight at each instant in time)
+#   if b is NULL, we use an uniform vector loading, simple reference
+# - x is a matrix of price relative, normally an xts
+crp_bh <- function (x, b = NULL, bh = FALSE) {
+  if (is.null(b)) { b <- rep(1/dim(x)[2],dim(x)[2]) }
+  if(!is.compatible(b,x)) { stop("b and x not compatible in crp(x,b)", Call.=TRUE) } 
+  b <- normalize(b)
+  if (bh) { x <- x2w(x) }
+  if (is.vector(b)) { xp <- x %*% b }
+  else              { xp <- apply(b*x, 1, sum) }
+  if (is.xts(x)) { xp <- xts(xp, order.by=index(x)) }
+  if (bh) { return(xp) }
+  else    { return(x2w(xp)) }
 }
 
-crp <- function (b = NULL, x) {
-	return (crp_bh(b, x, bh = FALSE))
+crp <- function (x, b = NULL) {
+  return (crp_bh(x, b, bh = FALSE))
 }
 
-bh <- function (b = NULL, x) {
-  	# we accept b as an array, even if this is not really buy and hold
-	return (crp_bh(b, x, bh = TRUE))
+bh <- function (x, b = NULL) {
+  return (crp_bh(x, b, bh = TRUE))
 } 
 
 oracle <- function (x) { # non causal maximum gain
-  	xp <- xts(apply(x,1,max), order.by=index(x))
-  	return(xts(cumprod(xp), order.by=index(x)))
+  if(is.vector(x)) { return(x2w(x)) }
+  xp <- apply(x,1,max)
+  if (is.xts(x)) { return(xts(x2w(xp), order.by=index(x))) }
+  return(x2w(xp))
 }
 
 best.asset <- function (x) {
-  	xm <- x[,which.max(cumprod(x)[dim(x)[1]])]
-  	return(xts(cumprod(xm), order.by=index(x)))
+  w <- x2w(x)
+  if(is.vector(x)) { return(w) }
+  iBest <- which.max(w[dim(x)[1],])
+  return(w[,iBest])
 }
 
 worst.asset <- function (x) {
-  	xm <- x[,which.min(cumprod(x)[dim(x)[1]])]
-  	return(xts(cumprod(xm), order.by=index(x)))
+  w <- x2w(x)
+  if(is.vector(x)) { return(w) }
+  iWorst <- which.min(w[dim(x)[1],])
+  return(w[,iWorst])
 }
 
 best.envelope <- function (x) {
-  	wm <- apply(cumprod(x),1,max)
-  	return(xts(wm, order.by=index(x)))
+  w <- x2w(x)
+  if(is.vector(x)) { return(w) }
+  wm <- apply(w,1,max)
+  if(is.xts(x)) { return(xts(wm, order.by=index(x))) }
+  return(wm)
 }
 
 worst.envelope <- function (x) {
-  	wm <- apply(cumprod(x),1,min)
-  	return(xts(wm, order.by=index(x)))
+  w <- x2w(x)
+  if(is.vector(x)) { return(w) }
+  wm <- apply(w,1,min)
+  if(is.xts(x)) { return(xts(wm, order.by=index(x))) }
+  return(wm) 
 }
-
-crp.1d <- function (x, from = 0, to = 1, n = 11) {
-  # should have two columns
-  if(dim(x)[2] != 2) { stop("x is not a two column series in crp.1d(b,x)", Call.=TRUE) }
-  a <- seq(from, to, length.out = n)
-  w.1d <- 0 * a
-  t <- dim(x)[1]
-  for(i in 1:n) {
-      w.1d[i] <- crp(c(a[i],1-a[i]),x)[t]
-  }
-  return(w.1d)
-}
-
 
 round.to.zero <- function (b, do.round, eps) {
-	if (do.round) {
-		b[abs(b) < eps] <- 0
-	}
-	return(normalize(b))
+  if (do.round) { b[abs(b) < eps] <- 0 }
+  return(normalize(b))
 }
 
+# use quadratic programming approximation for fast results in finding best crp
+# this is sometimes called semilog
+# return the optimal vector of weights
 bcrp.qp <- function (x, clean.up = TRUE, clean.up.eps = 1e-10 ) {
-  	# use quadratic programming approximation for VERY fast results in finding best crp
-  	# see the semi-log optimal article for background and solve.QP for parameters
-  	Dmat <- t(x-1) %*% (x-1)
-  	dvec <- apply(x-1,2,sum)
-  	lb <- dim(x)[[2]]
-  	Amat <- matrix(0,lb,lb+1)
-  	Amat[,1] <- -1
-  	for (i in 1:lb) { Amat[i,i+1] <- 1 }
-  	bvec <- 0 * 1:(lb+1)
-  	bvec[1] <- -1
-  	b <- solve.QP(Dmat, dvec, Amat, bvec)
-	return(round.to.zero(b$solution, clean.up, clean.up.eps))
+  if (is.vector(x)) { return(c(1)) }
+  Dmat <- t(x-1) %*% (x-1)
+  dvec <- apply(x-1,2,sum)
+  lb <- dim(x)[[2]]
+  Amat <- matrix(0,lb,lb+1)
+  Amat[,1] <- -1
+  for (i in 1:lb) { Amat[i,i+1] <- 1 }
+  bvec <- 0 * 1:(lb+1)
+  bvec[1] <- -1
+  b <- solve.QP(Dmat, dvec, Amat, bvec)
+  return(round.to.zero(b$solution, clean.up, clean.up.eps))
 }
 
+# transform axis to insure non negative values, work except that it is not possible to reach 0 values
+# alternate approach would use constrained optimization
 CRPoptrescale <- function (b, x) {
-  	b <- exp(b)
-  	return(-crp(b,x)[dim(x)[1]])
+  b <- exp(b)
+  return(-crp(x,b)[dim(x)[1]])
 }
 
+# find the optimal CRP weights using optim (can be slow)
+# optim is unconstrained, and we use a trick to map any value as positive 
+# then to remap it into the simplex, see CRPoptrescale
 bcrp.optim <- function (x, maxit=20, clean.up = TRUE, clean.up.eps = 1e-10, fast.only = FALSE ) {
-  	# try to find a nice BCRP using optim (cam be slow)
-  	# optim is unconstrained, and we use a trick to map any value as positive 
-  	# then to remap it into the simplex, see CRPoptrescale
-	if (dim(x)[1] > dim(x)[2]) {
-	  	b0 <- try(bcrp.qp(x))
-	}
-	else {
-		b0 <- rep(1,dim(x)[2])
-	}
-  	if (inherits(b0,"try-error")) {
-		# if we cannot find the best one
-		b0 <- rep(0,dim(x)[2])
-                # identify best stock and use that as start point
-                b0[which.max(apply(x,2,prod))] <- 1
-		fast.only = FALSE
-  	}
-	if (!fast.only) {
-	  	solution <- optim(log(b0+clean.up.eps), CRPoptrescale, gr=NULL, method="BFGS", lower=-Inf, upper=Inf,control = list(maxit=maxit), hessian=FALSE, x)
-  		b0 <- exp(solution$par)
-	}
-	return(round.to.zero(b0/sum(b0), clean.up, clean.up.eps))
+  if(is.vector(x)) { return(c(1)) }
+  if (dim(x)[1] > dim(x)[2]) { b0 <- try(bcrp.qp(x)) }
+  else                       { b0 <- rep(1,dim(x)[2]); fast.only = FALSE }
+  if (inherits(b0,"try-error")) { # bcrp.qp may fail for ill conditioned problems, use best stock as start
+    b0 <- rep(0,dim(x)[2])
+    b0[which.max(apply(x,2,prod))] <- 1
+    fast.only = FALSE
+  }
+  if (!fast.only) {
+    solution <- optim(log(b0+clean.up.eps), CRPoptrescale, gr=NULL, method="BFGS", lower=-Inf, upper=Inf,control = list(maxit=maxit), hessian=FALSE, x)
+    b0 <- exp(solution$par)
+  }
+  return(round.to.zero(normalize(b0), clean.up, clean.up.eps))
 }
 
+# use a "urns and balls" approach, a is a vector of balls per urn
+# return NULL when done (all balls in the rightmost urn)
 next.simplex.point <- function (a) {
- 	# a is the current occupancy, length(a) is the number of "urns"
-	# scan to find the first urn that could give a ball
-	# push the ball once to the right if possible 
-	# if that urn is not empty, bring the rest of the ball to urn[1]
-	# returns NULL when done
-	nurns <- length(a)
-	for (i in 1:nurns) {
-		if (a[i] > 0) {
-			if (i == nurns) { return(NULL) }
-			else {
-				a[i+1] <- 1 + a[i+1]
-				a[1] <- a[i] - 1
-				if (i != 1) { a[i] <- 0 }
-				return(a)
-			}
-		}
-	}
+  nurns <- length(a)
+  for (i in 1:nurns) {
+    if (a[i] > 0) {
+      if (i == nurns) { return(NULL) }
+      else {
+        a[i+1] <- 1 + a[i+1]
+        a[1] <- a[i] - 1
+        if (i != 1) { a[i] <- 0 }
+        return(a)
+      }
+    }
+  }
 }
 
+# n urns and m balls, i.e. number of simplex points that will be sampled
 count.grid.points <- function (n, m) {
-	# n urns and m balls
-	pts <- 1
-	if (n < 2) { return(1) }
-  	for (i in 1:(n-1)) { pts <- pts * (m+i) / i }
-	return(pts)
+  pts <- 1
+  if (n < 2) { return(1) }
+  for (i in 1:(n-1)) { pts <- pts * (m+i) / i }
+  return(pts)
 }
 
-universal.cover <- function (x, n) { # should also return a vector of combined b
-	m <- dim(x)[2]
-	b <- 0 * 1:m
-	b[1] <- n
-	npts <- 0
-	w <- 0 * x[,1]
-	colnames(w) <- c("universal.cover")
-	repeat {
-		w <- w + crp(b,x)
-		npts <- npts + 1
-		b <- next.simplex.point(b)
-		if (is.null(b)) {
-			return(w/npts)
-		}
-	}
+# n is the number of sample intervals per dimension, i.e. step is 1/n
+universal.cover <- function (x, n) {
+  if (is.vector(x)) { return(x2w(x)) }
+  m <- dim(x)[2]
+  b <- 0 * 1:m
+  b[1] <- n
+  npts <- 0
+  w <- 0 * x[,1]
+  repeat {
+    w <- w + crp(x, b)
+    npts <- npts + 1
+    b <- next.simplex.point(b)
+    if (is.null(b)) {
+      return(w/npts)
+    }
+  }
 }
 
 # Ishijima methods for uniform and Dirichlet sampling of the simplex
 # uniform used the direct method (with sort), not the sequential method with exponent (could be done in fact)
+# n is the number of samples
+# m is the number of dimensions
 uniform.simplex.sampling <- function (n,m) {
-  # n is the number of samples
-  # m is the number of dimensions
+  if(m==1) { return(runif(n)) }
   x <- array(runif((m-1) * n), dim=c(n,(m-1)))  # prepare for the operation of apply
   if (m > 2) {
     x <- t(apply(x,1,sort))
@@ -200,32 +221,37 @@ uniform.simplex.sampling <- function (n,m) {
   return (cbind(x, 1-x))
 }
 
+# n is the number of samples
+# m is the number of dimensions
+# alpha is the parameter for the gamma
 dirichlet.simplex.sampling <- function (n, m, alpha=0.5) {
-  # n is the number of samples
-  # m is the number of dimensions
-  # alpha is the parameter for the gamma
-  x <- matrix(rgamma(m * n, alpha), ncol = m, byrow = TRUE)
+  if(m==1) { return (rgamma(n, alpha)) }
+  x <- array(rgamma(m * n, alpha), dim=c(n,m))
   sm <- x %*% rep(1, m)
   x/as.vector(sm)
 }
 
+# method is "uniform" or "dirichlet"
+# generation of points in simplex with correct density is based on Ishijima article
+# implementation for dirichlet is however taken from rdirichlet
+# n is the number of sample points
 universal.cover.random <- function (x, n, method) { # should also return a vector of combined b
-	# method is "uniform" or "dirichlet"
-	# generation of points in simplex with correct density is based on Ishijima article
-	# implementation for dirichlet is however taken from rdirichlet in package 
-	m <- dim(x)[2]
-	w <- 0 * x[,1]
-	colnames(w) <- c("universal.cover")
-	if (method == "uniform") { bs <- uniform.simplex.sampling(n,m) }
-	if (method == "dirichlet") { bs <- dirichlet.simplex.sampling(n,m) }
-	for (i in 1:n) { w <- w + crp(bs[i,],x) }
-	return (w/n)
+  if(is.vector(x)) { return(w2x(x)) }
+  m <- dim(x)[2]
+  w <- 0 * x[,1]
+  if (method == "uniform") { bs <- uniform.simplex.sampling(n,m) }
+  if (method == "dirichlet") { bs <- dirichlet.simplex.sampling(n,m) }
+  for (i in 1:n) { w <- w + crp(x, bs[i,]) }
+  return (w/n)
 }
 
-mult.upgrade <- function (x, eta, method) { # Multiplicative updates, unable to get reported results
-  # method currently supported are "EG" and "chi2"
-  # "exact" is more or less planed, but with low priority
-  # simple but recursive so needs an explicit loop
+# multiplicative updates algorithm, does not match published results
+# supported methods are: "EG" and "chi2"
+# "exact" is planned
+# very simple algorithm, but require a loop
+mult.upgrade <- function (x, eta, method) {
+  if(is.vector(x)) { return(c(1)) }
+  if(is.xts(x)) { x <- array(x,dim=dim(x)) }
   b <- 0 * x
   b[1,] <- 1/dim(x)[2]
   if (method == "EG") {
@@ -237,20 +263,21 @@ mult.upgrade <- function (x, eta, method) { # Multiplicative updates, unable to 
   }
   if (method == "chi2") {
     for (t in 2:dim(x)[1]) {
-      b[t,] <- b[t-1,] * ( eta * (x[t-1,] / (b[t-1,] %*% x[t-1,]) - 1) + 1) 
+      b[t,] <- b[t-1,] * (eta * (x[t-1,] / (b[t-1,] %*% x[t-1,]) - 1) + 1) 
       b[t,] <- b[t,] / sum(b[t,])
     }
     return(b)
   }
   if (method == "exact") {
-    print("Method ""exact"" is not currently supported in function mult.upgrade")
+    print("Method 'exact' is not currently supported in function mult.upgrade")
     return(NULL)
   }
   return(NULL)
 }
 
-switching.portfolio <- function(x, gamma, method) { # Singer switching portfolio approach
-  # method is "fixed" or "adaptive"
+# Yoram Singer switching portfolio
+# method is "fixed" or "adaptive", "adaptive" does not reproduce published results
+switching.portfolio <- function(x, gamma, method) {
   # w[t,i] store the value of asset i after application of x[t,i]
   w <- array(0, dim=dim(x))
   nAssets <- dim(x)[2]
@@ -261,7 +288,9 @@ switching.portfolio <- function(x, gamma, method) { # Singer switching portfolio
                   w[t-1,] + 
                   (gamma / (nAssets-1)) * sum(w[t-1,])) * x[t,]
     }
-    return(apply(w,1,sum))
+    w <- apply(w,1,sum)
+    if(is.xts(x)) { return(xts(w, order.by=index(x))) }
+    return(w)
   }
   if (method == "adaptive") {
     # wtt0[t0,i] store the value of the pure strategy starting at t0 before redistribution
@@ -278,7 +307,9 @@ switching.portfolio <- function(x, gamma, method) { # Singer switching portfolio
       wtt0[1:t,] <- wtt0[1:t,] * rep(x[t,], each=t)
       w[t,] <- apply(wtt0[1:t,],2,sum)
     }
-    return(apply(w,1,sum))
+    w <- apply(w,1,sum)
+    if(is.xts(x)) { return(xts(w, order.by=index(x))) }
+    return(w)
   }
   return(NULL)
 }
@@ -318,7 +349,7 @@ wscrp2 <- function (x, start=1, step=1, a=0.99, fast.only=TRUE) {
 		b[i:j,] <- t(bt)
 		i <- j
 	}
-	return(crp(b,x))
+	return(crp(x, b))
 }
 
 wscrp <- function (x, start=1, by=1, alpha=0.99, fast.only=TRUE) {
@@ -337,7 +368,7 @@ wscrp <- function (x, start=1, by=1, alpha=0.99, fast.only=TRUE) {
         b[i:j,] <- t(bt)
         i <- j
       }
-      return(crp(b,x))
+      return(crp(x, b))
 }
 
 scrp <- function (x, start=1, by=1, fast.only=TRUE) { 
@@ -363,6 +394,6 @@ scrp.original <- function (x, k0=1, k=1) {
 	}
 	# there can be rows that are NaN, we replace them with 1/M
 	b[is.nan(b)] <- 1/m
-	return(crp(b,x))
+	return(crp(x, b))
 }
 
