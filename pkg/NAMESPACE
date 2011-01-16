@@ -13,6 +13,7 @@ export(w2x,
        wscrp,
        scrp,
        mult.upgrade,
-       switching.portfolio
+       switching.portfolio,
+       nn.gyorfi
        )
        

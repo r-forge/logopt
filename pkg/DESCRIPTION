@@ -1,10 +1,10 @@
 Package: logopt
 Type: Package
 Title: Log optimal (universal) portfolios
-Version: 0.0-3
-Date: 2010-11-27
+Version: 0.0-4
+Date: 2011-01-15
 Author: Marc Delvaux
-Depends: quadprog, xts
+Depends: quadprog, xts, FNN
 Suggests: quantmod
 Maintainer: Marc Delvaux <mdelvaux@gmail.com>
 Description: Implement universal portfolio strategies targeting log-optimal growth

@@ -4,6 +4,7 @@
 
 require(xts)
 require(quadprog)
+require(FNN)
 
 # check for compatible dimensions
 # b is either a vector or a matrix of weights
@@ -127,12 +128,14 @@ bcrp.qp <- function (x, clean.up = TRUE, clean.up.eps = 1e-10 ) {
   dvec <- apply(x-1,2,sum)
   lb <- dim(x)[[2]]
   Amat <- matrix(0,lb,lb+1)
-  Amat[,1] <- -1
+  Amat[,1] <- 1
   for (i in 1:lb) { Amat[i,i+1] <- 1 }
   bvec <- 0 * 1:(lb+1)
-  bvec[1] <- -1
-  b <- solve.QP(Dmat, dvec, Amat, bvec)
-  return(round.to.zero(b$solution, clean.up, clean.up.eps))
+  bvec[1] <- 1
+  b <- solve.QP(Dmat, dvec, Amat, bvec, meq=1)
+  bc <- round.to.zero(b$solution, clean.up, clean.up.eps)
+  if(any(is.na(bc))) { return(b$solution) }
+  else               { return(bc) }
 }
 
 # transform axis to insure non negative values, work except that it is not possible to reach 0 values
@@ -314,86 +317,119 @@ switching.portfolio <- function(x, gamma, method) {
   return(NULL)
 }
 
-roll.bcrp <- function (x, start=1, step=1, window=NULL, fast.only=TRUE) {
-      m <- dim(x)[2]
-      n <- dim(x)[1]
-	b <- 0 * x
-	b[1:start,] <- 1/m
-      i <- start+1
-	if(is.null(window)) { window <- length(x) }
-      b0 <-  bcrp.optim(x[max(1,i-window):(i-1)], fast.only=fast.only)
-	while(i < n) {
-		b0 <- bcrp.optim(x[max(1,i-window):(i-1)], fast.only=fast.only)
-		b0[is.nan(b0)] <- 1/m
-		j <- min(n,i+step)
-		bt <- array(rep(b0,j-i+1),dim=c(m,j-i+1))
-		b[i:j,] <- t(bt)
-		i <- j
-	}
-	return(b)
-} 
-
-wscrp2 <- function (x, start=1, step=1, a=0.99, fast.only=TRUE) {
-	br <- roll.bcrp (x, start, step, window=length(x), fast.only=fast.only)
-	# should have different choices
-      m <- dim(x)[2]
-      n <- dim(x)[1]
-	b <- 0 * x
-	b[1:start,] <- 1/m
-      i <- start+1
-	b0 <- as.vector(br[i-1,])
-	while(i < n) {
-		b0 <- as.vector(br[i,]) * (1-a) + b0 * a
-		j <- min(n,i+step)
-		bt <- array(rep(b0,j-i+1),dim=c(m,j-i+1))
-		b[i:j,] <- t(bt)
-		i <- j
-	}
-	return(crp(x, b))
+# roll.bcrp returns the BCRP calculated at a number of points
+# and taking into account a window (potentially infinite)
+# wl is the window length
+# return is a list with
+# - the indices of the calculated starts
+# - the indices of the calculated ends
+# - a matrix of weights
+roll.bcrp <- function(x, from=1, by=1, wl=NULL, fast.only=TRUE) {
+  # smallish bug, need at least 2 rows for correct operation
+  n <- dim(x)[1]
+  m <- dim(x)[2]
+  from <- max(2,from)
+  ends <- seq(from,n,by)
+  nw <- length(ends)
+  b <- array(1/m,dim=c(nw,m))
+  if(is.null(wl)) { wl <- n }
+  starts <- pmax(ends-wl+1,1)
+  for (i in 1:nw) {
+    b[i,] <- bcrp.optim(x[starts[i]:ends[i],], fast.only=fast.only)
+  }
+  return(list(starts, ends, b))
 }
 
-wscrp <- function (x, start=1, by=1, alpha=0.99, fast.only=TRUE) {
-	# exponential moving average on scrp
-      m <- dim(x)[2]
-      n <- dim(x)[1]
-      b <- 0 * x
-      b[1:start,] <- 1/m
-      i <- start+1
-      b0 <-  bcrp.optim(x[1:(i-1)], fast.only=fast.only)
-      while(i < n) {
-        b0 <- bcrp.optim(x[1:(i-1)], fast.only=fast.only) * (1-alpha) + b0 * alpha
-        b0[is.nan(b0)] <- 1/m
-        j <- min(n,i+by)
-        bt <- array(rep(b0,j-i+1),dim=c(m,j-i+1))
-        b[i:j,] <- t(bt)
-        i <- j
+# EMA on the Successive CRP to avoid some instability
+wscrp <- function (x, from=1, by=1, alpha=0.99, fast.only=TRUE) {
+  m <- dim(x)[2]
+  n <- dim(x)[1]
+  b <- 0 * x + 1/m
+  from <- max(from,2)
+  i <- from+1
+  # smallish bug, need at least 2 rows for bcrp.optim
+  # the problem is that bcrp.optim has been rewritten to assume that a vector is
+  # a one column vector, while here it would be a one row vector
+  # unfortunately a one row slice becomes a vector and cannot be dsitinguished from
+  # a one column vector.  Solution would be to force the slice to be an array of the
+  # correct dimension, but this is annoying.  Note that this is only the case for
+  # arrays, xts does distinguish between the two cases.
+  b0 <- b[1,]
+  while(i < n) {
+    b0 <- bcrp.optim(x[1:(i-1),], fast.only=fast.only) * (1-alpha) + b0 * alpha
+    b0[is.nan(b0)] <- 1/m
+    j <- min(n,i+by)
+    bt <- array(rep(b0,j-i+1),dim=c(m,j-i+1))
+    b[i:j,] <- t(bt)
+    i <- j
+  }
+  return(crp(x, b))
+}
+
+scrp <- function (x, from=1, by=1, fast.only=TRUE) { 
+  return(wscrp(x, from=from, by=by, alpha=0, fast.only=fast.only)) 
+}
+
+# nearest neighbor approach, from Gyorfi, only calculate the porftolio
+# themselves at this time, not the weights
+# x contains the price relative
+# pls is either
+# - a scalar, in which case it is the value L in Gyorfi and the pl sequence is 0.02 + 0.05 * (l-1)/(L-1), l in 1:L
+# - directly the pl sequence
+# ks is either
+# - a scalar, in which case it is the value K in Gyorfi and the k sequence is 1:K
+# - directly the k sequence
+# qkl is the a priori loading on the K*L set of experts, if NULL uniform loading is used
+#
+nn.gyorfi <- function(x, pls, ks, qkl=NULL) {
+  if (is.xts(x)) { x <- array(x,dim=dim(x)) }
+  if (is.array(pls)) { L <- length(pls) }
+  else               { L <- pls ; pls <- 0.02 + 0.5 / (L-1) * ((1:L)-1) }
+  if (is.array(ks)) { K <- length(ks) }
+  else              { K <- ks ; ks <- 1:K }
+  if(is.null(qkl)) { qkl <- array(1/K/L, dim=c(K,L)) }
+  else { # check for compatibility
+    if(any(dim(qkl) != c(K,L))) {
+      print("qkl loading is not compatible with array of experts")
+      return(NULL)
+    }
+    qkl <- qkl/sum(qkl)
+  }
+  nSamples <- dim(x)[1]
+  nAssets <- dim(x)[2]
+  b <- array(1/nAssets,dim=c(K,L,nSamples,nAssets))
+  w <- array(0,dim=c(K,L,nSamples))
+ # the order of the loop is
+  # - k first, to construct the target array
+  # - then i (time), to calculate the set of nearest neighbors
+  # - then l to extract a subset of the nearest neighbors and optimize
+  for (ik in seq_along(ks)) {
+    k <- ks[ik]
+    # construct the target sequence by column juxtaposition
+    for (lag in 0:(k-1)) {
+      if (lag == 0) { xnn <- x[1:(nSamples-k+1),] }
+      else          { xnn <- cbind(xnn, x[(1+lag):(nSamples-k+1+lag),]) }
+    }
+    # initial part uses uniform, could extend to more than k
+    for (t in (k+2):(nSamples-k-1)) {
+      # calculate the set of number of nearest neighbors and their maximum
+      # extract the maximum number of nearest neighbor
+      ls <- floor((t-k+1) * pls)
+      if (max(ls) < 1) { next }
+      nnsk <- knnx.index(xnn[1:(t-k),],array(xnn[t-k+1,],dim=c(1,nAssets*k)),max(ls),algorithm="kd_tree")
+      for (il in seq_along(ls)) {
+        l <- ls[il]
+        if (l < 1) { next }
+        xcrp <- x[nnsk[1:l]+k,]
+        b[ik,il,t+1,] <- bcrp.optim(xcrp,fast.only=TRUE)
+        # print(c(ik, k, il, l, t, b[ik,il,t+1,]))
       }
-      return(crp(x, b))
+    }
+  }
+  for (ik in seq_along(ks)) {
+    for (il in seq_along(ls)) {
+      w[ik,il,] <- crp(x,b[ik,il,,])
+    }
+  }
+  return(list(b,w))
 }
-
-scrp <- function (x, start=1, by=1, fast.only=TRUE) { 
-	return(wscrp(x, start=start, by=by, alpha=0, fast.only=fast.only)) 
-}
-
-
-scrp.original <- function (x, k0=1, k=1) {
-	# at each t, select the bcrp for up to t-1 as the b for that t
-	# for speed, this is only after a start period of K0 points (1/M before)
-	# and then every K points
-	m <- dim(x)[2]
-      n <- dim(x)[1]
-	b <- 0 * as.matrix(x)
-	b[1:k0,] <- 1/m
-      i <- k0+1
-	while(i < n) {
-		b0 <- bcrp.optim(x[1:(i-1)],fast.only=TRUE)
-		j <- min(n,i+k)
-		bt <- array(rep(b0,j-i+1),dim=c(m,j-i+1))
-		b[i:j,] <- t(bt)
-		i <- j
-	}
-	# there can be rows that are NaN, we replace them with 1/M
-	b[is.nan(b)] <- 1/m
-	return(crp(x, b))
-}
-

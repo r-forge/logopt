@@ -1,3 +1,6 @@
+0.0-4
+Adding the universal approach based on nearest neighbor (from Gyorfi)
+
 0.0-3
 Now exporting universal.cover.random
 Clean up the code to use two spaces indent

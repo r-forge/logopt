@@ -19,4 +19,9 @@ NULL will be transformed as the uniform vector.
 \value{
     Time series of the wealth for the portfolio.
 }
-\author{ Marc Delvaux }
+\examples{
+require(logopt)
+data(nyse.cover.1962.1984)
+w <- bh(nyse.cover.1962.1984)
+plot(w, type="l", col="blue")
+}  \author{ Marc Delvaux }
