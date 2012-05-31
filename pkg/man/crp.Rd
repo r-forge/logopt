@@ -27,6 +27,6 @@ NULL will be transformed as the uniform vector.
 require(logopt)
 data(nyse.cover.1962.1984)
 w <- crp(nyse.cover.1962.1984)
-plot(w, type="l", col="blue")
+plot(w, type="l", color="blue")
 }  
 \author{ Marc Delvaux }

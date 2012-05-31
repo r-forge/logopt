@@ -1,8 +1,8 @@
 Package: logopt
 Type: Package
 Title: Log optimal (universal) portfolios
-Version: 0.0-4
-Date: 2011-01-15
+Version: 0.0-5
+Date: 2012-05-30
 Author: Marc Delvaux
 Depends: quadprog, xts, FNN
 Suggests: quantmod
